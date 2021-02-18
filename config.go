@@ -27,6 +27,8 @@ type CanonicalConfig struct {
 
 	NoiseReductionLevel string
 
+	SafeGuardLevel float32
+
 	logger             *zap.SugaredLogger
 	notifier           Notifier
 	stopWatcherChannel chan bool
@@ -53,9 +55,11 @@ const (
 	configKeyCOMPort             = "com_port"
 	configKeyBaudRate            = "baud_rate"
 	configKeyNoiseReductionLevel = "noise_reduction"
+	configKeySafeGuardLevel      = "safeguard_level"
 
-	defaultCOMPort  = "COM4"
-	defaultBaudRate = 9600
+	defaultCOMPort        = "COM4"
+	defaultBaudRate       = 9600
+	defaultSafeGuardLevel = 1 //No SafeGuard
 )
 
 // has to be defined as a non-constant because we're using path.Join
@@ -89,6 +93,7 @@ func NewConfig(logger *zap.SugaredLogger, notifier Notifier) (*CanonicalConfig, 
 	userConfig.SetDefault(configKeyInvertSliders, false)
 	userConfig.SetDefault(configKeyCOMPort, defaultCOMPort)
 	userConfig.SetDefault(configKeyBaudRate, defaultBaudRate)
+	userConfig.SetDefault(configKeySafeGuardLevel, defaultSafeGuardLevel)
 
 	internalConfig := viper.New()
 	internalConfig.SetConfigName(internalConfigName)
@@ -238,6 +243,7 @@ func (cc *CanonicalConfig) populateFromVipers() error {
 
 	cc.InvertSliders = cc.userConfig.GetBool(configKeyInvertSliders)
 	cc.NoiseReductionLevel = cc.userConfig.GetString(configKeyNoiseReductionLevel)
+	cc.SafeGuardLevel = float32(cc.userConfig.GetFloat64(configKeySafeGuardLevel))
 
 	cc.logger.Debug("Populated config fields from vipers")
 

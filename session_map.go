@@ -2,6 +2,7 @@ package deej
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 	"sync"
@@ -247,11 +248,16 @@ func (m *sessionMap) handleSliderMoveEvent(event SliderMoveEvent) {
 
 			// iterate all matching sessions and adjust the volume of each one
 			for _, session := range sessions {
-				if session.GetVolume() != event.PercentValue {
+				// do not change volume if the difference is too high
+				delta := float32(math.Abs(float64(session.GetVolume() - event.PercentValue)))
+
+				if delta < m.deej.config.SafeGuardLevel {
 					if err := session.SetVolume(event.PercentValue); err != nil {
 						m.logger.Warnw("Failed to set target session volume", "error", err)
 						adjustmentFailed = true
 					}
+				} else {
+					m.logger.Debugw("SafeGuard triggered, not changing volume", "delta", delta)
 				}
 			}
 		}
