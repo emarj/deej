@@ -27,6 +27,8 @@ type CanonicalConfig struct {
 
 	NoiseReductionLevel string
 
+	UnmuteThreshold float32
+
 	logger             *zap.SugaredLogger
 	notifier           Notifier
 	stopWatcherChannel chan bool
@@ -53,9 +55,12 @@ const (
 	configKeyCOMPort             = "com_port"
 	configKeyBaudRate            = "baud_rate"
 	configKeyNoiseReductionLevel = "noise_reduction"
+	configKeyUnmuteThreshold     = "unmute_threshold"
 
 	defaultCOMPort  = "COM4"
 	defaultBaudRate = 9600
+
+	defaultUnmuteThreshold = -1
 )
 
 // has to be defined as a non-constant because we're using path.Join
@@ -89,6 +94,7 @@ func NewConfig(logger *zap.SugaredLogger, notifier Notifier) (*CanonicalConfig, 
 	userConfig.SetDefault(configKeyInvertSliders, false)
 	userConfig.SetDefault(configKeyCOMPort, defaultCOMPort)
 	userConfig.SetDefault(configKeyBaudRate, defaultBaudRate)
+	userConfig.SetDefault(configKeyUnmuteThreshold, defaultUnmuteThreshold)
 
 	internalConfig := viper.New()
 	internalConfig.SetConfigName(internalConfigName)
@@ -238,6 +244,7 @@ func (cc *CanonicalConfig) populateFromVipers() error {
 
 	cc.InvertSliders = cc.userConfig.GetBool(configKeyInvertSliders)
 	cc.NoiseReductionLevel = cc.userConfig.GetString(configKeyNoiseReductionLevel)
+	cc.UnmuteThreshold = float32(cc.userConfig.GetFloat64(configKeyUnmuteThreshold))
 
 	cc.logger.Debug("Populated config fields from vipers")
 
