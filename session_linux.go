@@ -125,6 +125,35 @@ func (s *paSession) SetVolume(v float32) error {
 	return nil
 }
 
+func (s *paSession) SetMute(m bool) error {
+	request := proto.SetSinkMute{
+		SinkIndex: s.sinkInputIndex,
+		Mute:      m,
+	}
+
+	if err := s.client.Request(&request, nil); err != nil {
+		s.logger.Warnw("Failed to mute session", "error", err)
+		return fmt.Errorf("mute session volume: %w", err)
+	}
+
+	s.logger.Debugw("Muting session volume")
+
+	return nil
+}
+
+func (s *paSession) GetMute() bool {
+	request := proto.GetSinkInputInfo{
+		SinkInputIndex: s.sinkInputIndex,
+	}
+	reply := proto.GetSinkInputInfoReply{}
+
+	if err := s.client.Request(&request, &reply); err != nil {
+		s.logger.Warnw("Failed to get session volume", "error", err)
+	}
+
+	return reply.Muted
+}
+
 func (s *paSession) Release() {
 	s.logger.Debug("Releasing audio session")
 }
@@ -191,6 +220,65 @@ func (s *masterSession) SetVolume(v float32) error {
 	}
 
 	s.logger.Debugw("Adjusting session volume", "to", fmt.Sprintf("%.2f", v))
+
+	return nil
+}
+
+func (s *masterSession) GetMute() bool {
+	var muted bool
+
+	if s.isOutput {
+		request := proto.GetSinkInfo{
+			SinkIndex: s.streamIndex,
+		}
+		reply := proto.GetSinkInfoReply{}
+
+		if err := s.client.Request(&request, &reply); err != nil {
+			s.logger.Warnw("Failed to get session volume", "error", err)
+			return false
+		}
+
+		muted = reply.Mute
+	} else {
+		request := proto.GetSourceInfo{
+			SourceIndex: s.streamIndex,
+		}
+		reply := proto.GetSourceInfoReply{}
+
+		if err := s.client.Request(&request, &reply); err != nil {
+			s.logger.Warnw("Failed to get session volume", "error", err)
+			return false
+		}
+
+		muted = reply.Mute
+	}
+
+	return muted
+}
+
+func (s *masterSession) SetMute(m bool) error {
+	var request proto.RequestArgs
+
+	if s.isOutput {
+		request = &proto.SetSinkMute{
+			SinkIndex: s.streamIndex,
+			Mute:      m,
+		}
+	} else {
+		request = &proto.SetSourceMute{
+			SourceIndex: s.streamIndex,
+			Mute:        m,
+		}
+	}
+
+	if err := s.client.Request(request, nil); err != nil {
+		s.logger.Warnw("Failed to mute session volume",
+			"error", err)
+
+		return fmt.Errorf("adjust session volume: %w", err)
+	}
+
+	s.logger.Debugw("Muting session volume")
 
 	return nil
 }

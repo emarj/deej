@@ -12,8 +12,8 @@ type Session interface {
 	SetVolume(v float32) error
 
 	// TODO: future mute support
-	// GetMute() bool
-	// SetMute(m bool) error
+	GetMute() bool
+	SetMute(m bool) error
 
 	Key() string
 	Release()
