@@ -1,15 +1,19 @@
-const int DEBUG = 0;
+const int DEBUG = 1;
 
 const int NUM_SLIDERS = 3;
+const int CMD_SIZE = 6;
+const int LINE_BUFFER = CMD_SIZE * NUM_SLIDERS + (NUM_SLIDERS -1) +1;
 
 const int sliderPin = A0;
 const int selectorBtnPin = 7;
 const int muteBtnPin = 2;
+const int ledPin = 13;
 
 
-int currentSlider = 0;
+int selectedSlider = 0;
 
 int analogSliderValues[NUM_SLIDERS];
+int analogSliderMute[NUM_SLIDERS];
 
 /********<Debounce Stuff>********/
 int selectorBtnState;             // the current reading from the input pin
@@ -29,72 +33,132 @@ unsigned long lastDebounceMuteTime = 0;  // the last time the output pin was tog
 unsigned long debounceMuteDelay = 50;
 /********</Debounce Stuff>********/
 
-int mutedSlider = -1;
+int sent = 0;
 
 
-
-void setup() { 
+void setup() {
   pinMode(sliderPin, INPUT);
   pinMode(selectorBtnPin, INPUT);
   pinMode(muteBtnPin, INPUT);
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
 
   Serial.begin(9600);
 
   Serial.println("Initiating...");
+
+
 }
 
 void loop() {
-  if (DEBUG) {
-    String str = String("Slider #") + String(currentSlider) + String(" selected");
-    Serial.println(str);
-  }
+
   updateSelectorBtn();
   updateMuteBtn();
   updateSliders();
+
+  updateUI();
   sendValues(); // Actually send data (all the time)
+  readValues();
+
   delay(10);
 }
 
 void nextSlider() {
-  if (currentSlider == (NUM_SLIDERS -1)) {
-    currentSlider = 0;
+  if (selectedSlider == (NUM_SLIDERS - 1)) {
+    selectedSlider = 0;
   } else {
-    currentSlider++;
+    selectedSlider++;
+  }
+   if (DEBUG) {
+    String str = String("Slider #") + String(selectedSlider) + String(" selected");
+    Serial.println(str);
   }
 }
 
 void muteCurrentSlider() {
-   mutedSlider = currentSlider;
+  analogSliderMute[selectedSlider] = !analogSliderMute[selectedSlider];
 }
 
 
 void updateSliders() {
-  analogSliderValues[currentSlider] = analogRead(sliderPin);
+  analogSliderValues[selectedSlider] = analogRead(sliderPin);
 }
 
 void sendValues() {
-  
+
   String builtString = String("");
 
   for (int i = 0; i < NUM_SLIDERS; i++) {
-    if (mutedSlider != i) {
-      builtString += String((int)analogSliderValues[i]);
-    } else {
-      builtString += String("M");
-     }
+
+    builtString += String((int)analogSliderValues[i]);
+
+    builtString += String(":") + String((analogSliderMute[i]) ? "M" : "U");
 
     if (i < NUM_SLIDERS - 1) {
       builtString += String("|");
     }
+
+
   }
 
-  mutedSlider = -1;
-  
   Serial.println(builtString);
 }
 
+void readValues() {
+  char input[LINE_BUFFER];
+  char buffer[30];
+
+  if (!Serial.available()) {
+    return;
+    }
+    
+  byte size = Serial.readBytes(input, LINE_BUFFER);
+  // Add the final 0 to end the C string
+  input[size] = '\0';
+  int sliderID = 0;
+  
+
+  // Read each command pair
+  char* command = strtok(input, "|");
+  while (command != 0)
+  {
+    // Split the command in two values
+    char* separator = strchr(command, ':');
+    if (separator != 0)
+    {
+      // Actually split the string in 2: replace ':' with 0
+      *separator = '\0';
+      
+      int sliderValue = atoi(command);
+      ++separator;
+      int muteValue = (*separator == 'M');
+
+      setMute(sliderID,muteValue);
+      
+      sprintf(buffer,"Slider %d: value %d, mute: %d",sliderID,sliderValue,muteValue);
+      Serial.println(buffer);
+
+      
+      
+    }
+    // Find the next command in input string
+    command = strtok(0, "|");
+    ++sliderID;
+  }
+}
+
+void setMute(int s, int m) {
+  analogSliderMute[s] = m;
+ 
+}
+
+void updateUI() {
+   digitalWrite(ledPin, analogSliderMute[selectedSlider]);
+}
+
+
 void updateSelectorBtn() {
- // read the state of the switch into a local variable:
+  // read the state of the switch into a local variable:
   int reading = digitalRead(selectorBtnPin);
 
   // check to see if you just pressed the selectorBtn
@@ -120,14 +184,14 @@ void updateSelectorBtn() {
         nextSlider();
       }
     }
- }
+  }
 
   // save the reading. Next time through the loop, it'll be the lastSelectorBtnState:
   lastSelectorBtnState = reading;
 }
 
 void updateMuteBtn() {
- // read the state of the switch into a local variable:
+  // read the state of the switch into a local variable:
   int reading = digitalRead(muteBtnPin);
 
   // check to see if you just pressed the muteBtn
@@ -153,7 +217,7 @@ void updateMuteBtn() {
         muteCurrentSlider();
       }
     }
- }
+  }
 
   // save the reading. Next time through the loop, it'll be the lastMuteBtnState:
   lastMuteBtnState = reading;

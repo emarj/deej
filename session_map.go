@@ -262,8 +262,9 @@ func (m *sessionMap) handleSliderMoveEvent(event SliderMoveEvent) {
 						}
 					}
 				} else {
-					m.logger.Debugw("Toggling session mute", "session", session.Key())
-					session.ToggleMute()
+					if session.GetMute() != event.Mute {
+						session.SetMute(event.Mute)
+					}
 				}
 			}
 		}
