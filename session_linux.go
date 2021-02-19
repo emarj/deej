@@ -126,9 +126,9 @@ func (s *paSession) SetVolume(v float32) error {
 }
 
 func (s *paSession) SetMute(m bool) error {
-	request := proto.SetSinkMute{
-		SinkIndex: s.sinkInputIndex,
-		Mute:      m,
+	request := proto.SetSinkInputMute{
+		SinkInputIndex: s.sinkInputIndex,
+		Mute:           m,
 	}
 
 	if err := s.client.Request(&request, nil); err != nil {
@@ -152,6 +152,10 @@ func (s *paSession) GetMute() bool {
 	}
 
 	return reply.Muted
+}
+
+func (s *paSession) ToggleMute() {
+	s.SetMute(!s.GetMute())
 }
 
 func (s *paSession) Release() {
@@ -281,6 +285,10 @@ func (s *masterSession) SetMute(m bool) error {
 	s.logger.Debugw("Setting session mute", "to", fmt.Sprintf("%v", m))
 
 	return nil
+}
+
+func (s *masterSession) ToggleMute() {
+	s.SetMute(!s.GetMute())
 }
 
 func (s *masterSession) Release() {

@@ -14,6 +14,7 @@ type Session interface {
 	// TODO: future mute support
 	GetMute() bool
 	SetMute(m bool) error
+	ToggleMute()
 
 	Key() string
 	Release()
