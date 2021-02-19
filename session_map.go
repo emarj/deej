@@ -247,17 +247,23 @@ func (m *sessionMap) handleSliderMoveEvent(event SliderMoveEvent) {
 
 			// iterate all matching sessions and adjust the volume of each one
 			for _, session := range sessions {
-				if session.GetVolume() != event.PercentValue {
-					if m.deej.config.UnmuteThreshold >= 0 {
-						if session.GetMute() && (session.GetVolume() <= m.deej.config.UnmuteThreshold) && session.GetVolume() < event.PercentValue {
-							session.SetMute(false)
+				if !event.isMute {
+
+					if session.GetVolume() != event.PercentValue {
+						if m.deej.config.UnmuteThreshold >= 0 {
+							if session.GetMute() && (session.GetVolume() <= m.deej.config.UnmuteThreshold) && session.GetVolume() < event.PercentValue {
+								session.SetMute(false)
+							}
+						}
+
+						if err := session.SetVolume(event.PercentValue); err != nil {
+							m.logger.Warnw("Failed to set target session volume", "error", err)
+							adjustmentFailed = true
 						}
 					}
-
-					if err := session.SetVolume(event.PercentValue); err != nil {
-						m.logger.Warnw("Failed to set target session volume", "error", err)
-						adjustmentFailed = true
-					}
+				} else {
+					m.logger.Debugw("Toggling session mute", "session", session.Key())
+					session.ToggleMute()
 				}
 			}
 		}
