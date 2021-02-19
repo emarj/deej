@@ -21,3 +21,8 @@ baud_rate: 9600
 # adjust the amount of signal noise reduction depending on your hardware quality
 # supported values are "low" (excellent hardware), "default" (regular hardware) or "high" (bad, noisy hardware)
 noise_reduction: default
+
+# negative number = disabled
+# suggested values between are 0 and 0.1, a negative number means disabled
+# set it to a positive number on Linux since by default (Gnome on Ubuntu) it mutes devices when setting volume 0 from the UI
+unmute_threshold: 0.1

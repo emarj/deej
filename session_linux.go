@@ -133,10 +133,10 @@ func (s *paSession) SetMute(m bool) error {
 
 	if err := s.client.Request(&request, nil); err != nil {
 		s.logger.Warnw("Failed to mute session", "error", err)
-		return fmt.Errorf("mute session volume: %w", err)
+		return fmt.Errorf("(un)mute session volume: %w", err)
 	}
 
-	s.logger.Debugw("Muting session volume")
+	s.logger.Debugw("Setting session mute", "to", fmt.Sprintf("%v", m))
 
 	return nil
 }
@@ -278,7 +278,7 @@ func (s *masterSession) SetMute(m bool) error {
 		return fmt.Errorf("adjust session volume: %w", err)
 	}
 
-	s.logger.Debugw("Muting session volume")
+	s.logger.Debugw("Setting session mute", "to", fmt.Sprintf("%v", m))
 
 	return nil
 }

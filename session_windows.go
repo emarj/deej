@@ -158,7 +158,7 @@ func (s *wcaSession) SetMute(m bool) error {
 		s.logger.Warnw("Failed to set session mute", "error", err)
 		return fmt.Errorf("mute session: %w", err)
 	}
-	s.logger.Debugw("Muting session volume")
+	s.logger.Debugw("Setting session mute")
 
 	return nil
 }
@@ -218,7 +218,7 @@ func (s *masterSession) SetMute(m bool) error {
 		s.logger.Warnw("Failed to set session mute", "error", err)
 		return fmt.Errorf("mute session: %w", err)
 	}
-	s.logger.Debugw("Muting session volume")
+	s.logger.Debugw("Setting session mute")
 
 	return nil
 }

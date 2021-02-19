@@ -250,7 +250,6 @@ func (m *sessionMap) handleSliderMoveEvent(event SliderMoveEvent) {
 				if session.GetVolume() != event.PercentValue {
 					if m.deej.config.UnmuteThreshold >= 0 {
 						if session.GetMute() && (session.GetVolume() <= m.deej.config.UnmuteThreshold) && session.GetVolume() < event.PercentValue {
-							m.logger.Debug("unmuting session '", session.Key(), "'")
 							session.SetMute(false)
 						}
 					}
