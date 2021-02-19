@@ -248,12 +248,10 @@ func (m *sessionMap) handleSliderMoveEvent(event SliderMoveEvent) {
 			// iterate all matching sessions and adjust the volume of each one
 			for _, session := range sessions {
 				if session.GetVolume() != event.PercentValue {
-					if session.GetMute() {
-						if event.PercentValue > 0.05 {
-							m.logger.Debug("session '", session.Key(), "' is muted, unmuting")
+					if m.deej.config.UnmuteThreshold >= 0 {
+						if session.GetMute() && (session.GetVolume() <= m.deej.config.UnmuteThreshold) && session.GetVolume() < event.PercentValue {
+							m.logger.Debug("unmuting session '", session.Key(), "'")
 							session.SetMute(false)
-						} else {
-							m.logger.Debug("session '", session.Key(), "' is muted, we are lower than the treeshold, leaving it muted")
 						}
 					}
 
