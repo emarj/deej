@@ -1,12 +1,14 @@
 package util
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math"
 	"os"
 	"os/exec"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 
 	"go.uber.org/zap"
@@ -123,4 +125,8 @@ func SignificantlyDifferent(old float32, new float32, noiseReductionLevel string
 // a helper to make sure volume snaps correctly to 0 and 100, where appropriate
 func almostEquals(a float32, b float32) bool {
 	return math.Abs(float64(a-b)) < 0.000001
+}
+
+func BytesToString(s []byte) string {
+	return strings.ToUpper(hex.EncodeToString(s))
 }

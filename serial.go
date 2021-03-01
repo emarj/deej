@@ -44,7 +44,8 @@ type SliderMoveEvent struct {
 	Mute         bool
 }
 
-var expectedLinePattern = regexp.MustCompile(`^(\d{1,4})(:(M|U))*(\|(\d{1,4})(:(M|U))*)*\r\n$`)
+//var expectedLinePattern = regexp.MustCompile(`^(\xFF)[\x00-\xFF]*\n$`)
+var expectedLinePattern = regexp.MustCompile(`^FF[^\s]*0A$`)
 
 // NewSerialIO creates a SerialIO instance that uses the provided deej
 // instance's connection info to establish communications with the arduino chip
@@ -116,14 +117,17 @@ func (sio *SerialIO) Start() error {
 	go func() {
 		connReader := bufio.NewReader(sio.conn)
 		lineChannel := sio.readLine(namedLogger, connReader)
+		senderChannel := sio.sender(namedLogger)
 
 		for {
 			select {
 			case <-sio.stopChannel:
+				close(senderChannel)
 				sio.close(namedLogger)
 			case line := <-lineChannel:
 				sio.handleLine(namedLogger, line)
 			}
+
 		}
 	}()
 
@@ -201,12 +205,13 @@ func (sio *SerialIO) close(logger *zap.SugaredLogger) {
 	sio.connected = false
 }
 
-func (sio *SerialIO) readLine(logger *zap.SugaredLogger, reader *bufio.Reader) chan string {
-	ch := make(chan string)
+func (sio *SerialIO) readLine(logger *zap.SugaredLogger, reader *bufio.Reader) chan []byte {
+	ch := make(chan []byte)
 
 	go func() {
 		for {
-			line, err := reader.ReadString('\n')
+			line, err := reader.ReadBytes('\n')
+			//.ReadString('\n')
 			if err != nil {
 
 				if sio.deej.Verbose() {
@@ -218,7 +223,7 @@ func (sio *SerialIO) readLine(logger *zap.SugaredLogger, reader *bufio.Reader) c
 			}
 
 			if sio.deej.Verbose() {
-				logger.Debugw("Read new line", "line", line)
+				//logger.Debugw("Read new line", "line", util.BytesToString(line), "ASCII", string(line))
 			}
 
 			// deliver the line to the channel
@@ -229,21 +234,40 @@ func (sio *SerialIO) readLine(logger *zap.SugaredLogger, reader *bufio.Reader) c
 	return ch
 }
 
-func (sio *SerialIO) handleLine(logger *zap.SugaredLogger, line string) {
+func (sio *SerialIO) handleLine(logger *zap.SugaredLogger, line []byte) {
 
 	// this function receives an unsanitized line which is guaranteed to end with LF,
 	// but most lines will end with CRLF. it may also have garbage instead of
 	// deej-formatted values, so we must check for that! just ignore bad ones
-	if !expectedLinePattern.MatchString(line) {
+	var sb strings.Builder
+	lineHex := util.BytesToString(line)
+	//if !expectedLinePattern.Match(line) {
+
+	if !expectedLinePattern.MatchString(lineHex) {
+		if sio.deej.Verbose() {
+			logger.Debugw("Discarding line", "line", lineHex, "ASCII", string(line))
+		}
 		return
 	}
 
-	// trim the suffix
-	line = strings.TrimSuffix(line, "\r\n")
+	// trim prefix and suffix
+	line = line[1 : len(line)-1]
 
-	// split on pipe (|), this gives a slice of numerical strings between "0" and "1023"
-	splitLine := strings.Split(line, "|")
-	numSliders := len(splitLine)
+	if len(line) == 0 {
+		if sio.deej.Verbose() {
+			logger.Debugw("empty command", "line", lineHex)
+		}
+		return
+	}
+
+	//Parse Header
+
+	h := line[0]
+	//cmd := (h >> 7) == 1
+	numSliders := int(h & 0b00111111)
+	if sio.deej.Verbose() {
+		//logger.Debugw("command", "cmd", cmd, "nsliders", numSliders)
+	}
 
 	// update our slider count, if needed - this will send slider move events for all
 	if numSliders != sio.lastKnownNumSliders {
@@ -258,29 +282,38 @@ func (sio *SerialIO) handleLine(logger *zap.SugaredLogger, line string) {
 		}
 	}
 
-	// for each slider:
+	line = line[1:]
+
+	if len(line) != numSliders {
+		if sio.deej.Verbose() {
+			logger.Debugw("Malformed command", "line", lineHex, "nsl", numSliders)
+		}
+		return
+	}
+
 	moveEvents := []SliderMoveEvent{}
-	for sliderIdx, stringValue := range splitLine {
+	for i, b := range line {
+		//Parse volume cmd
+		m := (b >> 7) == 1
+		v := int(b & 0b01111111)
 
-		splitValue := strings.Split(stringValue, ":")
-		narg := len(splitValue)
-		if narg < 1 || narg > 2 {
-			sio.logger.Debugw("Got malformed line from serial, ignoring", "line", line)
+		if v > 100 {
+			sio.logger.Debugw("Volume cannot be greater than zero", "line", lineHex, "volume", v)
 			return
 		}
 
-		// convert string values to integers ("1023" -> 1023)
-		number, _ := strconv.Atoi(splitValue[0])
-
-		// turns out the first line could come out dirty sometimes (i.e. "4558|925|41|643|220")
-		// so let's check the first number for correctness just in case
-		if sliderIdx == 0 && number > 1023 {
-			sio.logger.Debugw("Got malformed line from serial, ignoring", "line", line)
-			return
+		sb.WriteString(strconv.Itoa(v))
+		sb.WriteByte(':')
+		mch := byte('U')
+		if m {
+			mch = 'M'
+		}
+		sb.WriteByte(mch)
+		if i < (numSliders - 1) {
+			sb.WriteByte('|')
 		}
 
-		// map the value from raw to a "dirty" float between 0 and 1 (e.g. 0.15451...)
-		dirtyFloat := float32(number) / 1023.0
+		dirtyFloat := float32(v) / 100
 
 		// normalize it to an actual volume scalar between 0.0 and 1.0 with 2 points of precision
 		normalizedScalar := util.NormalizeScalar(dirtyFloat)
@@ -291,13 +324,13 @@ func (sio *SerialIO) handleLine(logger *zap.SugaredLogger, line string) {
 		}
 
 		// check if it changes the desired state (could just be a jumpy raw slider value)
-		if util.SignificantlyDifferent(sio.currentSliderPercentValues[sliderIdx], normalizedScalar, sio.deej.config.NoiseReductionLevel) {
+		if util.SignificantlyDifferent(sio.currentSliderPercentValues[i], normalizedScalar, sio.deej.config.NoiseReductionLevel) {
 
 			// if it does, update the saved value and create a move event
-			sio.currentSliderPercentValues[sliderIdx] = normalizedScalar
+			sio.currentSliderPercentValues[i] = normalizedScalar
 
 			moveEvents = append(moveEvents, SliderMoveEvent{
-				SliderID:     sliderIdx,
+				SliderID:     i,
 				PercentValue: normalizedScalar,
 			})
 
@@ -306,27 +339,19 @@ func (sio *SerialIO) handleLine(logger *zap.SugaredLogger, line string) {
 			}
 		}
 
-		if narg > 1 {
-			var mute bool
-			switch splitValue[1] {
-			case "M":
-				mute = true
-			case "U":
-				mute = false
-			default:
-				sio.logger.Debugw("Got malformed line from serial, but it passed regex!", "line", line)
-				return
-			}
-			//if sio.currentSliderMuteValues[sliderIdx] != mute {
+		sio.currentSliderMuteValues[i] = m
 
-			moveEvents = append(moveEvents, SliderMoveEvent{
-				SliderID:     sliderIdx,
-				PercentValue: 0,
-				isMute:       true,
-				Mute:         mute,
-			})
-			//}
-		}
+		moveEvents = append(moveEvents, SliderMoveEvent{
+			SliderID:     i,
+			PercentValue: 0,
+			isMute:       true,
+			Mute:         m,
+		})
+
+	}
+
+	if sio.deej.Verbose() {
+		logger.Debugw("Received command", "line", lineHex, "cmd", sb.String())
 	}
 
 	// deliver move events if there are any, towards all potential consumers
@@ -337,4 +362,71 @@ func (sio *SerialIO) handleLine(logger *zap.SugaredLogger, line string) {
 			}
 		}
 	}
+}
+func (sio *SerialIO) sender(logger *zap.SugaredLogger) chan struct{} {
+	ticker := time.NewTicker(200 * time.Millisecond)
+	quit := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				sio.sendValues(logger)
+			case <-quit:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+
+	return quit
+}
+
+func (sio *SerialIO) sendValues(logger *zap.SugaredLogger) {
+	var sb strings.Builder
+	msg := make([]byte, 0, sio.lastKnownNumSliders+3)
+	var b byte
+	var m byte
+
+	msg = append(msg, 0xFF)
+
+	//Make header
+	b = byte(sio.lastKnownNumSliders)
+	b |= (1 << 7)
+	msg = append(msg, b)
+
+	for i, v := range sio.currentSliderPercentValues {
+
+		b = byte(v * 100)
+
+		mch := byte('U')
+		if sio.currentSliderMuteValues[i] {
+			m = 1
+			mch = 'M'
+		} else {
+			m = 0
+		}
+
+		b |= (m << 7)
+
+		sb.WriteString(strconv.Itoa(int(b)))
+		sb.WriteByte(':')
+		sb.WriteByte(mch)
+		if i < (len(sio.currentSliderPercentValues) - 1) {
+			sb.WriteByte('|')
+		}
+
+		msg = append(msg, b)
+	}
+	msg = append(msg, '\n')
+	_, err := sio.conn.Write(msg)
+	if err != nil {
+		if sio.deej.Verbose() {
+			logger.Warnw("Failed to write line to serial", "error", err, "line", util.BytesToString(msg))
+		}
+	}
+
+	if sio.deej.Verbose() {
+		logger.Debugw("Write new line", "line", util.BytesToString(msg), "cmd", sb.String())
+	}
+
 }
